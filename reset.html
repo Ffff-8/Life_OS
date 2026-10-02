@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Diagnostica LifeOS</title>
+  <link rel="icon" href="./icons/favicon.png" sizes="32x32" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin:0; font:15px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+           background:#0e1116; color:#e8ecf3; padding:22px 18px 60px; }
+    .wrap { max-width:620px; margin:0 auto; }
+    h1 { font-size:21px; margin:0 0 4px; }
+    .sub { color:#8b96a8; margin:0 0 20px; }
+    .card { background:#161b23; border:1px solid #263042; border-radius:16px; padding:18px 16px; margin-bottom:14px; }
+    h2 { font-size:15px; margin:0 0 10px; letter-spacing:.02em; text-transform:uppercase; color:#8b96a8; }
+    table { width:100%; border-collapse:collapse; font-size:13.5px; }
+    td { padding:6px 0; vertical-align:top; border-bottom:1px solid #1f2734; word-break:break-all; }
+    td:first-child { color:#8b96a8; width:44%; }
+    .ok { color:#3ddc84; font-weight:650; }
+    .ko { color:#ff6b6b; font-weight:650; }
+    .warn { color:#ffc107; font-weight:650; }
+    button, a.btn { display:inline-block; font:inherit; font-weight:650; border-radius:12px; padding:12px 16px;
+                    border:0; cursor:pointer; text-decoration:none; margin:6px 8px 0 0; }
+    .primary { background:#4f6df5; color:#fff; }
+    .ghost { background:#222a36; color:#e8ecf3; }
+    .danger { background:#7a1f28; color:#ffd9dd; }
+    button[disabled] { opacity:.55; cursor:default; }
+    .note { color:#8b96a8; font-size:13px; margin-top:10px; }
+    code { background:#0e1116; padding:1px 5px; border-radius:5px; font-size:13px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Diagnostica LifeOS</h1>
+  <p class="sub">Questa pagina non usa il service worker né il CSS dell'app: funziona anche quando l'app non parte.</p>
+
+  <div class="card">
+    <h2>Installazione</h2>
+    <table id="env"></table>
+  </div>
+
+  <div class="card">
+    <h2>File dell'app (stato HTTP reale)</h2>
+    <table id="files"></table>
+    <p class="note">Se un file risulta 404, non esiste in quella posizione: su GitHub Pages il percorso della cartella corrisponde al nome del repository e distingue maiuscole e minuscole.</p>
+  </div>
+
+  <div class="card">
+    <h2>Service worker e cache</h2>
+    <table id="sw"></table>
+  </div>
+
+  <div class="card">
+    <h2>Azioni</h2>
+    <button class="primary" id="hard">Svuota cache e service worker, poi ricarica</button>
+    <a class="btn ghost" href="./index.html">Apri LifeOS</a>
+    <button class="danger" id="wipe">Elimina i dati di LifeOS (IndexedDB)</button>
+    <p class="note">Il primo pulsante risolve una cache rimasta bloccata su una versione precedente. Il secondo cancella definitivamente eventi, attività, note, idee, obiettivi, diario, inbox e categorie salvati su questo dispositivo: esporta prima un backup dall'app.</p>
+  </div>
+</div>
+
+<script>
+(async function () {
+  var APP_FILES = ['./index.html', './css/styles.css', './js/app.js', './js/store.js', './js/router.js',
+                   './js/editors.js', './js/recur.js', './js/ai/parser.js', './js/views/more.js',
+                   './manifest.json', './service-worker.js', './icons/icon-192.png'];
+
+  function row(k, v, cls) {
+    return '<tr><td>' + k + '</td><td class="' + (cls || '') + '">' + v + '</td></tr>';
+  }
+
+  var env = document.getElementById('env');
+  env.innerHTML =
+    row('URL della pagina', location.href) +
+    row('Cartella dell\'app', location.pathname.replace(/[^/]*$/, '') || '/') +
+    row('Origine', location.origin) +
+    row('Contesto sicuro (HTTPS o localhost)', window.isSecureContext ? 'Sì' : 'NO — il service worker non si registra', window.isSecureContext ? 'ok' : 'ko') +
+    row('Versione attesa dell\'app', '2.0.0');
+
+  var files = document.getElementById('files');
+  files.innerHTML = APP_FILES.map(function (f) {
+    return '<tr><td><code>' + f + '</code></td><td id="f-' + f.replace(/[^a-z0-9]/gi, '_') + '">verifica…</td></tr>';
+  }).join('');
+
+  APP_FILES.forEach(function (f) {
+    var cell = document.getElementById('f-' + f.replace(/[^a-z0-9]/gi, '_'));
+    fetch(f, { cache: 'no-store' }).then(function (r) {
+      var ct = r.headers.get('content-type') || '—';
+      cell.innerHTML = '<span class="' + (r.ok ? 'ok' : 'ko') + '">' + r.status + '</span> · ' + ct;
+    }).catch(function () {
+      cell.innerHTML = '<span class="ko">errore di rete</span>';
+    });
+  });
+
+  var swTable = document.getElementById('sw');
+  var lines = '';
+  if (!('serviceWorker' in navigator)) {
+    lines += row('Service worker', 'non supportato da questo browser', 'warn');
+  } else {
+    var regs = await navigator.serviceWorker.getRegistrations();
+    if (!regs.length) lines += row('Registrazioni', 'nessuna', 'warn');
+    regs.forEach(function (r) {
+      var w = r.active || r.installing || r.waiting;
+      lines += row('Scope', r.scope);
+      lines += row('Script', w ? w.scriptURL : '—');
+      lines += row('Stato', w ? w.state : '—', w && w.state === 'activated' ? 'ok' : 'warn');
+    });
+  }
+  try {
+    var keys = await caches.keys();
+    lines += row('Cache presenti', keys.length ? keys.join('<br>') : 'nessuna');
+  } catch (e) { lines += row('Cache', 'non leggibili', 'warn'); }
+  swTable.innerHTML = lines;
+
+  document.getElementById('hard').addEventListener('click', function () {
+    this.disabled = true; this.textContent = 'Pulizia in corso…';
+    (async function () {
+      try {
+        if ('serviceWorker' in navigator) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }
+        if (window.caches) {
+          var ks = await caches.keys();
+          await Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        }
+      } catch (e) {}
+      location.replace('./index.html');
+    })();
+  });
+
+  document.getElementById('wipe').addEventListener('click', function () {
+    if (!confirm('Eliminare DEFINITIVAMENTE tutti i dati di LifeOS su questo dispositivo?')) return;
+    if (!confirm('Ultima conferma: eventi, attività, note, idee, obiettivi, diario, inbox e categorie verranno cancellati.')) return;
+    var req = indexedDB.deleteDatabase('lifeos');
+    req.onsuccess = req.onerror = req.onblocked = function () { alert('Dati eliminati. Ricarico LifeOS.'); location.replace('./index.html'); };
+  });
+})();
+</script>
+</body>
+</html>

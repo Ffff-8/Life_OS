@@ -1,0 +1,47 @@
+import { chromium, devices } from 'playwright';
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+const ROOT=path.resolve('.'); const PORT=8199;
+const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.png':'image/png'};
+const srv=http.createServer((q,r)=>{const p=decodeURIComponent(q.url.split('?')[0]);const f=path.join(ROOT,p==='/'?'/index.html':p);
+ if(!fs.existsSync(f)||fs.statSync(f).isDirectory()){r.writeHead(404);r.end('404');return;}
+ r.writeHead(200,{'Content-Type':MIME[path.extname(f)]||'application/octet-stream','Cache-Control':'no-store'});fs.createReadStream(f).pipe(r);});
+await new Promise(r=>srv.listen(PORT,'127.0.0.1',r));
+const b=await chromium.launch(); const c=await b.newContext({...devices['Pixel 7'],locale:'it-IT'}); const p=await c.newPage();
+const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+await p.goto(`http://127.0.0.1:${PORT}/index.html#/home`,{waitUntil:'load'});
+await p.waitForSelector('.hero-greet',{timeout:15000});
+// dati dimostrativi realistici inseriti tramite l'API reale dell'app
+await p.evaluate(async()=>{
+  const s=await import('/js/store.js');
+  const cats=s.list('categories');
+  const uni=(cats.find(c=>/Universit/.test(c.name)))?.id||'';
+  const pers=(cats.find(c=>/Personale/.test(c.name)))?.id||'';
+  const inf=(cats.find(c=>/Informatica/.test(c.name)))?.id||'';
+  const d=(n,h)=>{const x=new Date();x.setDate(x.getDate()+n);x.setHours(h,0,0,0);return x.toISOString();};
+  await s.save('tasks',{title:'Ripassare Analisi II',description:'Capitoli 4–5: integrali doppi',due:d(0,18),priority:'urgent',status:'todo',categoryId:uni,estimateMin:120,reminders:[120,30],tags:['studio','esame'],rating:7});
+  await s.save('tasks',{title:'Fare esercizi di Algoritmi',due:d(0,21),priority:'normal',status:'doing',categoryId:inf,estimateMin:90,reminders:[30],tags:['esercizi']});
+  await s.save('tasks',{title:'Comprare quaderno A4',due:d(-1,10),priority:'low',status:'todo',categoryId:pers,reminders:[60]});
+  await s.save('tasks',{title:'Consegnare il progetto di reti',due:d(-2,12),priority:'high',status:'done',categoryId:inf,completedAt:d(-2,11),rating:9});
+  await s.save('events',{title:'Esame Analisi II',description:'Aula 3 — portare calcolatrice',start:d(5,9),durationMin:120,location:'Aula 3',priority:'urgent',categoryId:uni,reminders:[20160,10080,1440,120,30]});
+  await s.save('events',{title:'Dentista',start:d(2,15),durationMin:45,location:'Studio Dr. Rossi',priority:'normal',categoryId:pers,reminders:[1440,120,30]});
+  await s.save('events',{title:'Sessione D&D',start:d(3,20),durationMin:180,location:'Casa di Marco',categoryId:(cats.find(c=>/D&D/.test(c.name)))?.id||'',reminders:[60]});
+  await s.save('ideas',{title:'Nuovo progetto Godot',description:'Prototipo con generazione procedurale delle mappe',status:'idea',importance:4,feasibility:3,rating:4,categoryId:inf,tags:['godot','gamedev']});
+  await s.save('ideas',{title:'App per ripassare gli esami',description:'Flashcard con ripetizione dilazionata',status:'testing',importance:3,feasibility:4,rating:3,categoryId:inf});
+  await s.save('notes',{title:'Appunti Analisi — integrali doppi',text:'Cambio di variabile in coordinate polari.\nJacobiano = r.',categoryId:uni,tags:['analisi'],favorite:true});
+  await s.save('goals',{name:'Passare Analisi II nella sessione invernale',description:'Voto minimo 27',startDate:new Date().toISOString().slice(0,10),due:d(60,23),progress:65,priority:'high',categoryId:uni,subtasks:[{id:'s1',title:'Teoria capitoli 1–5',done:true},{id:'s2',title:'Esercizi capitoli 4–5',done:true},{id:'s3',title:'Simulazione esame',done:false}]});
+  await s.save('journal',{text:'Giornata intensa ma produttiva: sono riuscito a chiudere il capitolo sugli integrali.',rating:4,tags:['studio']});
+  await s.save('inbox',{text:'Devo ricordarmi di provare quel programma di animazione.'});
+});
+await wait(700);
+const setTheme=async(t)=>{await p.evaluate((th)=>document.documentElement.setAttribute('data-theme',th),t);await wait(400);};
+const shot=async(hash,name,theme,sel)=>{await setTheme(theme);await p.goto(`http://127.0.0.1:${PORT}/index.html${hash}`,{waitUntil:'load'});await p.waitForSelector(sel,{timeout:12000});await wait(1200);await p.screenshot({path:`docs/screens/${name}.png`});console.log('scatto:',name);};
+await shot('#/home','home-dark','dark','.hero-greet');
+await shot('#/home','home-light','light','.hero-greet');
+await shot('#/tasks','tasks','light','.filter-bar');
+await shot('#/calendar','calendar','dark','.cal-grid');
+await shot('#/ideas','ideas','light','#idea-q');
+await shot('#/goals','goals','dark','[data-new]');
+await shot('#/voice','voice','light','.voice-orb');
+await shot('#/reminders','reminders','dark','[data-check]');
+await shot('#/more/stats','stats','light','.stat-grid');
+await b.close(); srv.close();

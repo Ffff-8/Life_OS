@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Percorso non trovato — LifeOS</title>
+  <link rel="icon" href="./icons/favicon.png" sizes="32x32" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin:0; font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+           background:#0e1116; color:#e8ecf3; display:flex; min-height:100dvh;
+           align-items:center; justify-content:center; padding:24px; }
+    .card { max-width:520px; background:#161b23; border:1px solid #263042; border-radius:18px; padding:26px 22px; }
+    h1 { font-size:20px; margin:0 0 10px; }
+    p { margin:0 0 12px; color:#a7b1c2; }
+    code { background:#0e1116; padding:2px 6px; border-radius:6px; font-size:14px; }
+    a.btn { display:inline-block; margin-top:10px; background:#4f6df5; color:#fff; text-decoration:none;
+            padding:12px 18px; border-radius:12px; font-weight:650; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Percorso non trovato</h1>
+    <p>Questa pagina non fa parte di LifeOS. L'app usa un router a hash: tutte le sezioni si aprono da <code>index.html#/...</code>.</p>
+    <p>Pagina richiesta: <code id="req"></code></p>
+    <a class="btn" href="./index.html">Apri LifeOS</a>
+  </div>
+  <script>
+    document.getElementById('req').textContent = location.pathname + location.hash;
+  </script>
+</body>
+</html>
